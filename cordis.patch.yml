@@ -1,0 +1,3 @@
+- insert:
+    - id: dashboard
+      name: '@local/dsh-dashboard'

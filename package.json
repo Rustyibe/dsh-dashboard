@@ -1,0 +1,57 @@
+{
+  "name": "@local/dsh-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A warm-paper eye-care skin, a global status bar with live session telemetry, and a sprout brand mark for the DSH web UI.",
+  "license": "MIT",
+  "author": "Rustyibe",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "theme",
+    "skin",
+    "status-bar"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rustyibe/dsh-dashboard.git"
+  },
+  "homepage": "https://github.com/Rustyibe/dsh-dashboard#readme",
+  "bugs": {
+    "url": "https://github.com/Rustyibe/dsh-dashboard/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "engines": {
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  }
+}
