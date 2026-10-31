@@ -1,12 +1,13 @@
 /**
  * Nebula Dashboard — a Harness Web UI plugin.
  *
- * Contributes three additive surfaces under a fresh, eye-comfortable skin:
+ * Contributes four additive surfaces under a fresh, eye-comfortable skin:
  *  - a warm-paper token layer applied through `theme.overrideTokens`, so the
  *    skin reskins the whole app and survives restarts and refreshes (the
  *    framework only persists light/dark/system, so a registered third-party
  *    theme never could);
  *  - a global status bar (`shell.bottom`) with live session/workspace counts;
+ *  - a round clock pinned to the frame's top-right corner (`shell.overlay`);
  *  - a skin switcher settings row (`settings.general.item`) and a sprout brand
  *    mark (`sidebar.brand.mark`).
  *
@@ -414,6 +415,47 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** Twelve hour ticks; the quarter marks (12/3/6/9) carry the brand accent. */
+    const CLOCK_TICKS = Array.from({ length: 12 }, (_, index) => {
+      const major = index % 3 === 0;
+      return { major, angle: index * 30, y1: major ? 9 : 11.5, y2: major ? 17.5 : 14.5 };
+    });
+
+    /**
+     * Round analog clock pinned to the frame's top-right corner. It rides the
+     * click-through `shell.overlay` layer, so it floats above every column and
+     * never swallows a click — the corner toggle underneath stays reachable.
+     * Every hand rotates about the dial centre, so a hand at 354° and at 0°
+     * draws the same line: the per-minute wrap needs no special case. The
+     * second hand hard-ticks once per second (quartz feel, same cadence as the
+     * status-bar clock), while minute and hour hands creep between ticks.
+     * Decorative by design — the status bar keeps the readable digital time.
+     */
+    function RoundClock() {
+      const now = useNow(1000);
+      const date = new Date(now);
+      const seconds = date.getSeconds();
+      const minutes = date.getMinutes() + seconds / 60;
+      const hours = (date.getHours() % 12) + minutes / 60;
+      return h('div', { className: 'dsh-clock', 'aria-hidden': true },
+        h('style', null, SKIN_CSS),
+        h('div', { className: 'dsh-clock-face' },
+          h('svg', { className: 'dsh-clock-svg', viewBox: '0 0 100 100' },
+            CLOCK_TICKS.map((tick) => h('line', {
+              key: tick.angle,
+              x1: 50, y1: tick.y1, x2: 50, y2: tick.y2,
+              transform: `rotate(${tick.angle} 50 50)`,
+              className: 'dsh-clock-tick' + (tick.major ? ' is-major' : ''),
+            })),
+            h('line', { key: 'hour', className: 'dsh-clock-hand dsh-clock-hour', x1: 50, y1: 50, x2: 50, y2: 28, transform: `rotate(${hours * 30} 50 50)` }),
+            h('line', { key: 'minute', className: 'dsh-clock-hand dsh-clock-minute', x1: 50, y1: 50, x2: 50, y2: 17, transform: `rotate(${minutes * 6} 50 50)` }),
+            h('line', { key: 'second', className: 'dsh-clock-hand dsh-clock-second', x1: 50, y1: 57, x2: 50, y2: 13, transform: `rotate(${seconds * 6} 50 50)` }),
+            h('circle', { key: 'pin', className: 'dsh-clock-pin', cx: 50, cy: 50, r: 3.6 }),
+          ),
+        ),
+      );
+    }
+
     /* ------------------------------------------------------------------ *
      * Styles (rendered as a React element so unmount removes them)
      * ------------------------------------------------------------------ */
@@ -435,6 +477,16 @@ window.__ModuleLoader__.load({
       '.dsh-bar-item.is-live b{color:var(--dsw-alias-state-success-primary)}',
       '.dsh-bar-fill{flex:1;min-width:8px}',
       '.dsh-bar-clock{flex:none;font-weight:700;font-variant-numeric:tabular-nums;color:var(--dsw-alias-brand-text)}',
+      /* round corner clock: floats above every column, click-through */
+      '.dsh-clock{position:absolute;top:44px;right:16px;z-index:1;pointer-events:none}',
+      '.dsh-clock-face{box-sizing:border-box;width:54px;height:54px;border-radius:50%;corner-shape:round;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1));border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 30%,var(--dsw-alias-border-l1));box-shadow:0 1px 3px color-mix(in srgb,var(--dsw-alias-label-primary) 12%,transparent)}',
+      '.dsh-clock-svg{display:block;width:100%;height:100%}',
+      '.dsh-clock-tick{stroke:var(--dsw-alias-label-caption);stroke-width:1.6;stroke-linecap:round}',
+      '.dsh-clock-tick.is-major{stroke:var(--dsw-alias-brand-primary);stroke-width:2.8}',
+      '.dsh-clock-hand{stroke:var(--dsw-alias-label-primary);stroke-width:3.4;stroke-linecap:round}',
+      '.dsh-clock-hand.dsh-clock-hour{stroke-width:5}',
+      '.dsh-clock-second{stroke:var(--dsw-alias-brand-primary);stroke-width:1.6}',
+      '.dsh-clock-pin{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-brand-primary);stroke-width:1.8}',
       /* settings row */
       '.dsh-set-row{width:100%;align-items:center;gap:8px;padding:16px 0;display:flex;border-bottom:.5px solid var(--dsw-alias-border-l2)}',
       '.dsh-set-text{flex-direction:column;flex:1;min-width:0;gap:4px;display:flex;padding-right:48px}',
@@ -518,6 +570,13 @@ window.__ModuleLoader__.load({
             t,
           }),
         }, GlobalStatusBar));
+        /* Round corner clock: the additive `shell.overlay` seat. The layer is
+         * click-through and the clock opts back out of pointer events, so the
+         * corner toggle underneath stays reachable. */
+        ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+          name: 'shell.overlay',
+          id: 'dashboard.round-clock',
+        }, RoundClock));
         ctx.slots.inject('settings.general.item', () => ctx.slots.register({
           name: 'settings.general.item',
           id: 'dashboard-skin',

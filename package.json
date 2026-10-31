@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "A warm-paper eye-care skin, a global status bar with live session telemetry, and a sprout brand mark for the DSH web UI.",
+  "description": "A warm-paper eye-care skin, a global status bar with live session telemetry, a round clock at the top-right corner, and a sprout brand mark for the DSH web UI.",
   "license": "MIT",
   "author": "Rustyibe",
   "keywords": [
@@ -11,7 +11,8 @@
     "dsh-plugin",
     "theme",
     "skin",
-    "status-bar"
+    "status-bar",
+    "clock"
   ],
   "repository": {
     "type": "git",
