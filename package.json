@@ -1,9 +1,9 @@
 {
   "name": "@local/dsh-dashboard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "A warm-paper eye-care skin, a global status bar with live session telemetry, a round clock at the top-right corner, and a sprout brand mark for the DSH web UI.",
+  "description": "A warm-paper eye-care skin, a global status bar with live session telemetry, an optional draggable round corner clock with a remembered position, and a sprout brand mark for the DSH web UI.",
   "license": "MIT",
   "author": "Rustyibe",
   "keywords": [

@@ -7,7 +7,8 @@
  *    framework only persists light/dark/system, so a registered third-party
  *    theme never could);
  *  - a global status bar (`shell.bottom`) with live session/workspace counts;
- *  - a round clock pinned to the frame's top-right corner (`shell.overlay`);
+ *  - a round clock on the frame (`shell.overlay`): optional — a settings row
+ *    turns it on and off — and freely draggable, with its position remembered;
  *  - a skin switcher settings row (`settings.general.item`) and a sprout brand
  *    mark (`sidebar.brand.mark`).
  *
@@ -19,7 +20,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
     /** Locale namespace owned by this plugin. */
     const NS = 'dashboard';
@@ -34,6 +35,11 @@ window.__ModuleLoader__.load({
       'bar.running': '运行',
       'bar.workspaces': '工作区',
       'bar.panel': '面板',
+      'clock.row.title': '角落圆时钟',
+      'clock.row.desc': '开启或隐藏圆时钟，直接用鼠标拖动表盘即可改变位置，位置会被记住',
+      'clock.on': '开启',
+      'clock.off': '关闭',
+      'clock.reset': '重置位置',
     };
 
     const en = {
@@ -46,16 +52,23 @@ window.__ModuleLoader__.load({
       'bar.running': 'RUNNING',
       'bar.workspaces': 'WORKSPACES',
       'bar.panel': 'PANEL',
+      'clock.row.title': 'Corner clock',
+      'clock.row.desc': 'Show or hide the round clock, drag the dial anywhere to move it, and its position is remembered',
+      'clock.on': 'On',
+      'clock.off': 'Off',
+      'clock.reset': 'Reset position',
     };
 
     /* ------------------------------------------------------------------ *
      * Hooks
      * ------------------------------------------------------------------ */
 
-    /** A ticking clock value; the interval is cleared on unmount. */
+    /** A ticking clock value; the interval is cleared on unmount. A falsy
+     *  interval suspends ticking, so a hidden clock costs nothing. */
     function useNow(intervalMs) {
       const [now, setNow] = useState(() => Date.now());
       useEffect(() => {
+        if (!intervalMs) return undefined;
         const id = setInterval(() => setNow(Date.now()), intervalMs);
         return () => clearInterval(id);
       }, [intervalMs]);
@@ -291,6 +304,105 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /* ------------------------------------------------------------------ *
+     * Corner clock settings: one observable store shared by injection. The
+     * dial is shown by default; its position is empty until the user drags
+     * it, which keeps the CSS top-right corner as the untouched default.
+     * ------------------------------------------------------------------ */
+
+    /** Storage keys for the corner clock's visibility and position. */
+    const CLOCK_ON_KEY = 'dsh-dashboard:clock-on';
+    const CLOCK_POS_KEY = 'dsh-dashboard:clock-pos';
+    /** The dial is a fixed 54px square; keep clamping in step with the CSS. */
+    const CLOCK_EDGE = 54;
+    /** The smallest gap the dial keeps from a viewport edge. */
+    const CLOCK_MARGIN = 8;
+
+    /** Read the persisted clock visibility (shown unless explicitly off). */
+    function readClockOn() {
+      try {
+        return !(globalThis.localStorage && globalThis.localStorage.getItem(CLOCK_ON_KEY) === '0');
+      } catch {
+        return true;
+      }
+    }
+
+    /** Read the persisted dial position as viewport `{x, y}` pixels, or null. */
+    function readClockPos() {
+      try {
+        const raw = globalThis.localStorage && globalThis.localStorage.getItem(CLOCK_POS_KEY);
+        if (!raw) return null;
+        const pos = JSON.parse(raw);
+        if (pos && typeof pos.x === 'number' && typeof pos.y === 'number'
+          && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+          return pos;
+        }
+      } catch {
+        /* corrupt or blocked storage: fall back to the default corner */
+      }
+      return null;
+    }
+
+    /** Keep a dragged position fully inside the viewport. */
+    function clampClockPos(pos) {
+      const w = globalThis.innerWidth || CLOCK_EDGE + 2 * CLOCK_MARGIN;
+      const hgt = globalThis.innerHeight || CLOCK_EDGE + 2 * CLOCK_MARGIN;
+      const maxX = Math.max(CLOCK_MARGIN, w - CLOCK_EDGE - CLOCK_MARGIN);
+      const maxY = Math.max(CLOCK_MARGIN, hgt - CLOCK_EDGE - CLOCK_MARGIN);
+      return {
+        x: Math.min(Math.max(pos.x, CLOCK_MARGIN), maxX),
+        y: Math.min(Math.max(pos.y, CLOCK_MARGIN), maxY),
+      };
+    }
+
+    /**
+     * Tiny observable store for the corner clock, created once per activation
+     * and shared with every component by injection. Every write persists
+     * best-effort and notifies subscribers; storage failures degrade to
+     * session-only, exactly like the skin toggle.
+     */
+    function createClockStore() {
+      let state = { on: readClockOn(), pos: readClockPos() };
+      const listeners = new Set();
+      const emit = () => {
+        for (const listener of listeners) {
+          try {
+            listener();
+          } catch (error) {
+            console.error('dashboard: clock listener failed', error);
+          }
+        }
+      };
+      return {
+        get: () => state,
+        subscribe: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        setOn(on) {
+          if (state.on === on) return;
+          state = { ...state, on };
+          try {
+            globalThis.localStorage && globalThis.localStorage.setItem(CLOCK_ON_KEY, on ? '1' : '0');
+          } catch { /* session-only */ }
+          emit();
+        },
+        /** Update the position; persist only at the end of a drag or on reset. */
+        setPos(pos, persist) {
+          state = { ...state, pos };
+          if (!persist) {
+            emit();
+            return;
+          }
+          try {
+            if (pos) globalThis.localStorage && globalThis.localStorage.setItem(CLOCK_POS_KEY, JSON.stringify(pos));
+            else globalThis.localStorage && globalThis.localStorage.removeItem(CLOCK_POS_KEY);
+          } catch { /* session-only */ }
+          emit();
+        },
+      };
+    }
+
     /** Read the durable theme preference defensively. */
     function readThemePreference(theme) {
       try {
@@ -400,6 +512,43 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /**
+     * Settings row for the corner clock: an On/Off pair plus a reset. The
+     * state lives in the shared `clock` store the overlay dial subscribes to,
+     * so switching takes effect on the frame immediately. Reset forgets the
+     * dragged position and the dial returns to its default top-right corner.
+     */
+    function ClockSettingsRow({ t, clock }) {
+      const snap = useSnapshot(clock);
+      return h('div', { className: 'dsh-set-row' },
+        h('style', null, SKIN_CSS),
+        h('div', { className: 'dsh-set-text' },
+          h('div', { className: 'dsh-set-title' }, t('clock.row.title')),
+          h('div', { className: 'dsh-set-desc' }, t('clock.row.desc')),
+        ),
+        h('div', { className: 'dsh-set-control', role: 'group', 'aria-label': t('clock.row.title') },
+          h('button', {
+            type: 'button',
+            className: 'dsh-set-opt' + (snap.on ? ' is-active' : ''),
+            'aria-pressed': snap.on,
+            onClick: () => clock.setOn(true),
+          }, t('clock.on')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-set-opt' + (!snap.on ? ' is-active' : ''),
+            'aria-pressed': !snap.on,
+            onClick: () => clock.setOn(false),
+          }, t('clock.off')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-set-opt',
+            disabled: !snap.on || !snap.pos,
+            onClick: () => clock.setPos(null, true),
+          }, t('clock.reset')),
+        ),
+      );
+    }
+
     /** Soft sprout emblem replacing the sidebar brand mark (size from the sidebar). */
     function FreshBrandMark({ size }) {
       const edge = size || 22;
@@ -422,22 +571,106 @@ window.__ModuleLoader__.load({
     });
 
     /**
-     * Round analog clock pinned to the frame's top-right corner. It rides the
-     * click-through `shell.overlay` layer, so it floats above every column and
-     * never swallows a click — the corner toggle underneath stays reachable.
+     * Round analog clock on the frame overlay: optional and freely draggable.
+     * Visibility and position live in the injected `clock` store, which the
+     * settings row also reads, so a toggle takes effect without any slot being
+     * re-registered. While off the dial renders nothing and ticking is paused.
      * Every hand rotates about the dial centre, so a hand at 354° and at 0°
      * draws the same line: the per-minute wrap needs no special case. The
      * second hand hard-ticks once per second (quartz feel, same cadence as the
      * status-bar clock), while minute and hour hands creep between ticks.
-     * Decorative by design — the status bar keeps the readable digital time.
+     * The whole dial is the drag handle: pointer capture follows the cursor,
+     * the position is clamped to the viewport during the drag, and only the
+     * release persists it, so one drag costs one storage write. Without a
+     * stored position the dial keeps the CSS top-right corner as its home.
      */
-    function RoundClock() {
-      const now = useNow(1000);
+    function RoundClock({ clock }) {
+      const snap = useSnapshot(clock);
+      const now = useNow(snap.on ? 1000 : 0);
+      const dialRef = useRef(null);
+      const dragRef = useRef(null);
+      /* Dragging is React state, not a classList toggle: the store notifies
+       * on every move, and a re-render would overwrite any imperative
+       * className change. */
+      const [dragging, setDragging] = useState(false);
+      /* A remembered position can fall outside a shrunk window: pull the dial
+       * back on resize so it never ends up unreachable. */
+      useEffect(() => {
+        if (typeof globalThis.addEventListener !== 'function') return undefined;
+        const onResize = () => {
+          const pos = clock.get().pos;
+          if (!pos) return;
+          const next = clampClockPos(pos);
+          if (next.x !== pos.x || next.y !== pos.y) clock.setPos(next, true);
+        };
+        globalThis.addEventListener('resize', onResize);
+        return () => globalThis.removeEventListener('resize', onResize);
+      }, [clock]);
+      const endDrag = useCallback((event) => {
+        if (!dragRef.current) return;
+        dragRef.current = null;
+        setDragging(false);
+        const dial = dialRef.current;
+        if (dial) {
+          try {
+            dial.releasePointerCapture(event.pointerId);
+          } catch { /* capture already gone */ }
+        }
+        const pos = clock.get().pos;
+        if (pos) clock.setPos(pos, true);
+      }, [clock]);
+      /* Safety net for browsers without pointer capture: a release outside
+       * the dial still ends the drag. The element handler runs first and
+       * clears the ref, so this fires at most once per gesture. Both hooks
+       * stay above the disabled early-return: the hook order must not change
+       * when the settings row toggles the clock. */
+      useEffect(() => {
+        if (typeof globalThis.addEventListener !== 'function') return undefined;
+        const onRelease = (event) => {
+          if (dragRef.current) endDrag(event);
+        };
+        globalThis.addEventListener('pointerup', onRelease);
+        globalThis.addEventListener('pointercancel', onRelease);
+        return () => {
+          globalThis.removeEventListener('pointerup', onRelease);
+          globalThis.removeEventListener('pointercancel', onRelease);
+        };
+      }, [endDrag]);
+      if (!snap.on) return null;
       const date = new Date(now);
       const seconds = date.getSeconds();
       const minutes = date.getMinutes() + seconds / 60;
       const hours = (date.getHours() % 12) + minutes / 60;
-      return h('div', { className: 'dsh-clock', 'aria-hidden': true },
+      const timeLabel = pad2(date.getHours()) + ':' + pad2(date.getMinutes()) + ':' + pad2(date.getSeconds());
+      const startDrag = (event) => {
+        const dial = dialRef.current;
+        if (!dial || dragRef.current) return;
+        const rect = dial.getBoundingClientRect();
+        dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+        setDragging(true);
+        try {
+          dial.setPointerCapture(event.pointerId);
+        } catch {
+          /* no pointer capture: the drag still tracks moves on this element */
+        }
+      };
+      const moveDrag = (event) => {
+        const drag = dragRef.current;
+        if (!drag) return;
+        if (event.cancelable) event.preventDefault();
+        clock.setPos(clampClockPos({ x: event.clientX - drag.dx, y: event.clientY - drag.dy }), false);
+      };
+      return h('div', {
+        ref: dialRef,
+        className: 'dsh-clock' + (dragging ? ' is-dragging' : ''),
+        style: snap.pos ? { left: snap.pos.x + 'px', top: snap.pos.y + 'px', right: 'auto' } : undefined,
+        title: timeLabel,
+        'aria-label': timeLabel,
+        onPointerDown: startDrag,
+        onPointerMove: moveDrag,
+        onPointerUp: endDrag,
+        onPointerCancel: endDrag,
+      },
         h('style', null, SKIN_CSS),
         h('div', { className: 'dsh-clock-face' },
           h('svg', { className: 'dsh-clock-svg', viewBox: '0 0 100 100' },
@@ -477,9 +710,14 @@ window.__ModuleLoader__.load({
       '.dsh-bar-item.is-live b{color:var(--dsw-alias-state-success-primary)}',
       '.dsh-bar-fill{flex:1;min-width:8px}',
       '.dsh-bar-clock{flex:none;font-weight:700;font-variant-numeric:tabular-nums;color:var(--dsw-alias-brand-text)}',
-      /* round corner clock: floats above every column, click-through */
-      '.dsh-clock{position:absolute;top:44px;right:16px;z-index:1;pointer-events:none}',
-      '.dsh-clock-face{box-sizing:border-box;width:54px;height:54px;border-radius:50%;corner-shape:round;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1));border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 30%,var(--dsw-alias-border-l1));box-shadow:0 1px 3px color-mix(in srgb,var(--dsw-alias-label-primary) 12%,transparent)}',
+      /* round corner clock: viewport-anchored so a drag written in clientX /
+       * clientY pixels lands exactly where the cursor is; touch-action:none
+       * keeps a touch drag from scrolling the page underneath it */
+      '.dsh-clock{position:fixed;top:44px;right:16px;z-index:40;pointer-events:auto;cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}',
+      '.dsh-clock.is-dragging{cursor:grabbing}',
+      '.dsh-clock-face{box-sizing:border-box;width:54px;height:54px;border-radius:50%;corner-shape:round;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,var(--dsw-alias-bg-layer-1)),var(--dsw-alias-bg-layer-1));border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 30%,var(--dsw-alias-border-l1));box-shadow:0 1px 3px color-mix(in srgb,var(--dsw-alias-label-primary) 12%,transparent);transition:box-shadow .12s ease,border-color .12s ease}',
+      '.dsh-clock:hover .dsh-clock-face{border-color:var(--dsw-alias-brand-primary);box-shadow:0 2px 8px color-mix(in srgb,var(--dsw-alias-brand-primary) 28%,transparent)}',
+      '.dsh-clock.is-dragging .dsh-clock-face{box-shadow:0 6px 18px color-mix(in srgb,var(--dsw-alias-label-primary) 26%,transparent)}',
       '.dsh-clock-svg{display:block;width:100%;height:100%}',
       '.dsh-clock-tick{stroke:var(--dsw-alias-label-caption);stroke-width:1.6;stroke-linecap:round}',
       '.dsh-clock-tick.is-major{stroke:var(--dsw-alias-brand-primary);stroke-width:2.8}',
@@ -552,6 +790,10 @@ window.__ModuleLoader__.load({
             setTheme(id);
           }
         };
+        /* Corner clock state: one store per activation, shared by injection
+         * with the overlay dial and the settings row. Visibility and dragged
+         * position persist, so both survive restarts and refreshes. */
+        const clock = createClockStore();
         /* Single slots elect the lowest priority; the shipped brand mark sits
          * at the default 0, so a negative priority shadows it without the
          * same-priority duplicate error. */
@@ -570,12 +812,13 @@ window.__ModuleLoader__.load({
             t,
           }),
         }, GlobalStatusBar));
-        /* Round corner clock: the additive `shell.overlay` seat. The layer is
-         * click-through and the clock opts back out of pointer events, so the
-         * corner toggle underneath stays reachable. */
+        /* Round corner clock: the additive `shell.overlay` seat. The dial
+         * subscribes to the shared clock store, so the settings row can hide
+         * it and a drag can move it without re-registering anything. */
         ctx.slots.inject('shell.overlay', () => ctx.slots.register({
           name: 'shell.overlay',
           id: 'dashboard.round-clock',
+          inject: () => ({ clock }),
         }, RoundClock));
         ctx.slots.inject('settings.general.item', () => ctx.slots.register({
           name: 'settings.general.item',
@@ -584,6 +827,13 @@ window.__ModuleLoader__.load({
           locale: NS,
           inject: () => ({ t, theme: ctx.theme, setTheme, subscribeTheme, skin, onSkin }),
         }, ThemeSettingsRow));
+        ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+          name: 'settings.general.item',
+          id: 'dashboard-clock',
+          order: 40,
+          locale: NS,
+          inject: () => ({ t, clock }),
+        }, ClockSettingsRow));
       },
     };
   },

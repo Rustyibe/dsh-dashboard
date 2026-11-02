@@ -1,10 +1,10 @@
 # dsh-dashboard · 清爽护眼皮肤与状态栏
 
-[DSH (DeepSeek Harness)](https://www.npmjs.com/package/@deepseek-ai/dsh) Web 端的一套暖纸护眼皮肤，外加一条底部全局状态栏、一个右上角圆时钟和侧栏的嫩芽标记。
+[DSH (DeepSeek Harness)](https://www.npmjs.com/package/@deepseek-ai/dsh) Web 端的一套暖纸护眼皮肤，外加一条底部全局状态栏、一个可选且可自由拖动的圆时钟和侧栏的嫩芽标记。
 
 皮肤不是「注册一个第三方主题」，而是用 `theme.overrideTokens` 打一层 token 覆盖：框架只持久化浅色/深色/跟随系统，第三方主题注册后重启就没了，覆盖层则由插件在每次激活时重新贴上去。所以切换过一次「清爽护眼」之后，刷新、重启都还在。
 
-| 主界面：暖纸底色 + 底部状态栏 + 右上角圆时钟 | 设置 → 通用 → 界面皮肤 |
+| 主界面：暖纸底色 + 底部状态栏 + 圆时钟 | 设置 → 通用 → 界面皮肤 |
 |:---:|:---:|
 | ![主界面](assets/screenshot-home.png) | ![皮肤切换](assets/screenshot-skin.png) |
 
@@ -12,7 +12,7 @@
 
 - **全局换肤**：约一百四十个 `--dsw-alias-*` / `--dsw-specific-*` / shiki token 整体换成暖纸配色，覆盖底色、边框、品牌色、状态色、按钮、滚动条、菜单、侧栏、输入框、气泡、Markdown 代码块、diff 与语法高亮，圆角也一并放大
 - **底部状态栏**：26px 高的单行遥测条——`◈ HARNESS//FRESH` 品牌、跳动的均衡器、会话数、运行中会话数（>0 时变绿）、工作区数、当前中央面板、每秒刷新的时钟
-- **右上角圆时钟**：54px 的圆形模拟时钟，挂在 `shell.overlay` 浮层上——12 个刻度（四个整点为品牌色）、时针/分针/秒针三根指针，秒针每秒一跳；浮层本身点击穿透，时钟也不接收指针事件，不会挡住右上角的按钮
+- **圆时钟**：54px 的圆形模拟时钟，挂在 `shell.overlay` 浮层上——12 个刻度（四个整点为品牌色）、时针/分针/秒针三根指针，秒针每秒一跳。可在「设置 → 通用 → 角落圆时钟」里开启或关闭；开启时按住表盘即可拖到界面任意位置，位置存进 `localStorage`，刷新与重启后还在，窗口缩小或被别的界面遮挡时会自动拉回可视区内
 - **侧栏嫩芽**：把侧栏左上角的品牌标记换成手绘嫩芽 SVG，尺寸跟随侧栏
 - **三档切换**：设置 → 通用 → 界面皮肤里选 浅色 / 深色 / 清爽护眼，选择写进 `localStorage`，下次自动恢复
 - **双语**：文案跟随 DSH 的语言设置（中文 / English）
@@ -36,8 +36,8 @@ dsh plugin --profile web add github:Rustyibe/dsh-dashboard
 从 tarball 装：
 
 ```bash
-npm pack                                        # 得到 local-dsh-dashboard-1.0.0.tgz
-dsh plugin --profile web add ./local-dsh-dashboard-1.0.0.tgz
+npm pack                                        # 得到 local-dsh-dashboard-1.1.0.tgz
+dsh plugin --profile web add ./local-dsh-dashboard-1.1.0.tgz
 ```
 
 也可以在 DSH 的 Plugins 页面里填 `github:Rustyibe/dsh-dashboard` 安装。
@@ -55,6 +55,7 @@ dsh --profile web --dump-config | grep -A3 "id: dashboard"
 1. 想关掉皮肤：设置 → 通用 → 界面皮肤 → 选「浅色」或「深色」。皮肤层会被移除，同时把框架主题设成对应档位
 2. 想换回来：同一行选「清爽护眼」
 3. 选择记在 `localStorage` 的 `dsh-dashboard:skin`（`fresh` / `plain`），换浏览器或清缓存后会回到默认的「清爽护眼」
+4. 圆时钟：设置 → 通用 → 角落圆时钟，「开启 / 关闭」随时切换；开启后按住表盘拖到任意位置，「重置位置」让它回到右上角默认处。默认状态是开启且停在右上角
 
 皮肤和框架的深浅色偏好是两件事：皮肤层不区分浅色/深色（两套都贴同一份暖纸值），选「浅色」「深色」时才会把层摘掉、露出框架原本的配色。
 
@@ -76,7 +77,7 @@ dsh --profile web --dump-config | grep -A3 "id: dashboard"
 
 ```
 index.js            Host 半边：空 apply（纯前端插件，不注册工具/路由）
-client.js           全部逻辑：token 覆盖层、底部状态栏、右上角圆时钟、皮肤切换行、嫩芽品牌标记
+client.js           全部逻辑：token 覆盖层、底部状态栏、可拖动圆时钟、皮肤切换行、圆时钟开关行、嫩芽品牌标记
 cordis.patch.yml    插入 dashboard 这一层（无 config）
 locale/{zh,en}.json 插件管理页里的标题与描述
 icon.svg            插件管理页图标（侧栏标记是 client.js 里的内联 SVG）
@@ -88,9 +89,10 @@ assets/             截图
 | 槽位 | 优先级 | 内容 |
 | --- | --- | --- |
 | `shell.bottom` | `-10` | 全局状态栏（单值槽，负优先级盖过默认实现） |
-| `shell.overlay` | 默认 | 右上角圆时钟（列表槽，追加不替换；浮层点击穿透，时钟 `pointer-events:none`） |
+| `shell.overlay` | 默认 | 圆时钟（列表槽，追加不替换；`position:fixed` 接收指针事件以支持拖动，关闭时组件直接不渲染） |
 | `sidebar.brand.mark` | `-10` | 嫩芽 SVG，`size` 由侧栏传入 |
 | `settings.general.item` | `order: 30` | 「界面皮肤」三档切换行 |
+| `settings.general.item` | `order: 40` | 「角落圆时钟」开关与重置位置行 |
 
 数据链路：
 
@@ -98,14 +100,14 @@ assets/             截图
 2. `FRESH_LAYER` 是 `{ token: { light, dark } }` 的形状——框架要求两种模式都给值，这里两套填同一个值，于是皮肤在浅色/深色偏好下都保持暖纸感
 3. 状态栏订阅 `ctx.sessions.list` 与 `ctx.workspaces.list` 的快照：会话数只算 `updatedAt` 非零的行（subagent 目录项是 0，被排除），运行数是 `running` 为真的行数，面板 id 来自 `layout.panelInfo`
 4. 时钟用 1 秒定时器，卸载时清掉；样式全部走 `--dsw-alias-*` 变量，所以换肤后状态栏自己也会跟着变色
-5. 圆时钟挂在 `shell.overlay` 上，同样 1 秒定时器；秒针硬跳（石英感），分时针在两次跳动之间缓慢爬行；所有指针绕表盘中心旋转，354° 与 0° 画出同一条线，整分换圈无需特殊处理
+5. 圆时钟挂在 `shell.overlay` 上，同样 1 秒定时器；秒针硬跳（石英感），分时针在两次跳动之间缓慢爬行；所有指针绕表盘中心旋转，354° 与 0° 画出同一条线，整分换圈无需特殊处理。开关与位置存在一个每次激活只建一次的 `createClockStore()` 可观察对象里，表盘组件和设置行都通过 `useSnapshot` 订阅它，所以点开关不需要重新注册槽位；拖动走 pointer capture，拖动过程中只改内存，松手才写一次 `localStorage`，坐标用 `position:fixed` 的视口像素并始终夹在窗口内
 6. 切换行调用 `onSkin()`：存 `localStorage` → 贴层或摘层 → 摘层时用 `ctx.theme.setTheme()` 写入框架偏好
 
 ## 安全与隐私
 
 - **Host 半边是空的**：不注册模型工具、不开 HTTP 路由、不读写文件
 - **不发请求**：运行时不访问任何网络服务
-- **只写一个键**：`localStorage` 里的 `dsh-dashboard:skin`，除此之外不落盘、不写 cookie
+- **只写三个键**：`localStorage` 里的 `dsh-dashboard:skin`、`dsh-dashboard:clock-on` 与 `dsh-dashboard:clock-pos`，除此之外不落盘、不写 cookie
 - **不碰业务数据**：只读会话与工作区的计数、`running` 标志和当前面板 id，不看消息内容
 - **可干净卸载**：token 覆盖层登记在 effect 里，插件卸载或停用后自动还原成框架配色
 
@@ -116,8 +118,8 @@ assets/             截图
 - **只覆盖已知 token**：框架后续新增的 `--dsw-*` 变量不在表里时，会沿用默认配色，可能出现个别控件「不是暖纸色」
 - **品牌文字硬编码**：状态栏的 `◈ HARNESS//FRESH` 不随语言切换
 - **状态栏固定 26px**：内容单行不换行，窗口很窄时中段会被裁掉
-- **圆时钟是装饰件**：只显示表盘与指针，没有数字读数；精确时间看底部状态栏，且它对读屏器隐藏（`aria-hidden`）
-- **圆时钟浮在右栏之上**：右侧面板展开时，时钟会压在面板内容的右上角；因为它 `pointer-events:none`，点击会穿透到下面的按钮，但视觉上会有遮挡
+- **圆时钟是装饰件**：表盘没有数字读数（鼠标悬停时 `title` 会显示到秒的数字时间）；精确时间看底部状态栏
+- **圆时钟接收指针事件**：为了支持拖动，开启时它是可点击、可拖拽的——会挡住正下方那块 54px 区域的按钮。不想被打扰就在设置里关掉它，或把它拖开
 - **面板 id 直接显示**：状态栏里的 `CONVERSATION` 之类是槽位 id 大写后的结果，不是本地化名称
 - **仅 web 平台**：这些槽位只存在于 web 客户端
 
@@ -127,7 +129,8 @@ assets/             截图
 | --- | --- |
 | 刷新后皮肤没了 | 看设置里是不是被切到了「浅色/深色」；`localStorage['dsh-dashboard:skin']` 为 `plain` 时不会贴层 |
 | 底部没有状态栏 | 确认已重启 `dsh web`；`shell.bottom` 槽旧版本没有，检查 DSH 版本 |
-| 右上角没有圆时钟 | 同上，圆时钟走 `shell.overlay` 槽，旧版本 DSH 没有这个槽；确认插件已重启加载 |
+| 圆时钟不见了 | 先看设置 → 通用 → 角落圆时钟是否被切到「关闭」；再查 `localStorage['dsh-dashboard:clock-on']` 是否为 `0`。旧版本 DSH 没有 `shell.overlay` 槽，确认插件已重启加载 |
+| 圆时钟被拖丢了 | 设置 → 通用 → 角落圆时钟 → 「重置位置」，立刻回到右上角默认处 |
 | 侧栏图标还是原来的 | 别的插件用了更低的 `priority` 抢同一个单值槽；`primary` 低者胜，改自己的 `priority` 即可 |
 | 个别控件颜色不对 | 上游新增了未覆盖的 token，往 `FRESH_TOKENS` 里补一条 |
 | 想要更冷的白/更暖的白 | 改 `--dsw-alias-bg-base` 与 `bg-layer-1..3` 四个值就够了 |
@@ -148,7 +151,7 @@ dsh plugin --profile web add github:Rustyibe/dsh-dashboard#v1.0.0
 dsh plugin --profile web remove @local/dsh-dashboard
 ```
 
-卸载后皮肤层随插件一起撤销，界面回到你原本的主题；`localStorage` 里的选择会留着，重装后仍是上次那档。想清零就执行 `localStorage.removeItem('dsh-dashboard:skin')`。
+卸载后皮肤层随插件一起撤销，界面回到你原本的主题；`localStorage` 里的皮肤与圆时钟选择会留着，重装后仍是上次的状态。想清零就把 `dsh-dashboard:skin`、`dsh-dashboard:clock-on`、`dsh-dashboard:clock-pos` 三个键 removeItem 掉。
 
 改完都要重启 `dsh web`。本地 `link:` 安装则只改代码、刷新页面即可（客户端 bundle 按文件 mtime 取新 rev）。
 
@@ -159,7 +162,7 @@ dsh plugin --profile web remove @local/dsh-dashboard
 | 整套配色 | `client.js` 里的 `FRESH_TOKENS` |
 | 圆角、焦点环 | `FRESH_TOKENS` 末尾的 `--dsw-radius-*` 与 `--dsw-focus-ring-color` |
 | 状态栏内容与样式 | `GlobalStatusBar` 与 `SKIN_CSS` 里的 `.dsh-bar*` |
-| 圆时钟的外观与位置 | `RoundClock` 组件、`CLOCK_TICKS` 与 `SKIN_CSS` 里的 `.dsh-clock*`（位置在 `.dsh-clock` 的 `top`/`right`，尺寸在 `.dsh-clock-face` 的 `width`/`height`） |
+| 圆时钟的外观 | `RoundClock` 组件、`CLOCK_TICKS` 与 `SKIN_CSS` 里的 `.dsh-clock*`（默认停在右上角的位置在 `.dsh-clock` 的 `top`/`right`，尺寸在 `.dsh-clock-face` 的 `width`/`height`，改动尺寸时把 `CLOCK_EDGE` 一并改掉，边界夹取才对得上） |
 | 状态栏高度 | `SKIN_CSS` 的 `.dsh-bar{height:26px}` |
 | 侧栏图标 | `FreshBrandMark` 的 SVG 路径 |
 | 皮肤在语言里的名字 | `locale/{zh,en}.json` 与 `client.js` 内的 `zh` / `en` 字典（两处要一致） |
@@ -182,7 +185,9 @@ DSH_HOME=/tmp/dsh-dash-dev dsh --profile web --port 7788
 皮肤状态存在浏览器里，调样式时想回到默认值：
 
 ```js
-localStorage.removeItem('dsh-dashboard:skin')   // 刷新后重新贴层
+localStorage.removeItem('dsh-dashboard:skin')      // 刷新后重新贴层
+localStorage.removeItem('dsh-dashboard:clock-on')  // 圆时钟回到「默认开启」
+localStorage.removeItem('dsh-dashboard:clock-pos') // 圆时钟回到右上角
 ```
 
 改 `client.js` 之后刷新页面即可；如果页面报 `slot entry crashed`，先看控制台里那个槽位的组件收到了哪些 props——单值槽不会自动注入服务，需要在注册时用 `inject` 显式传入。
